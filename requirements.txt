@@ -1,0 +1,9 @@
+geopy~=2.2.0
+beautifulsoup4~=4.10.0
+folium~=0.12.1
+requests~=2.27.0
+SQLAlchemy~=1.4.26
+Flask~=2.0.2
+pysimilar~=0.2
+psycopg2==2.9.3
+
