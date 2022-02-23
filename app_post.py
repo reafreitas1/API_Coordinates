@@ -1,8 +1,7 @@
-from flask import Flask, Response, request
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from geopy.geocoders import Nominatim
 import urllib.parse
-import requests
 from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
@@ -46,35 +45,22 @@ def post_tabs():
             parsed_address[item['label']] = item['value']
         return parsed_address
 
-    def compare_local():
+    def find_city():
         parsed_address = parsing_address()
-        city_input = parsed_address["city"].title()
+        postcode = parsed_address["postcode"]
+        cp_string = postcode
+        string_split = (cp_string.split('-'))
+        page = ("https://www.codigo-postal.pt/?cp4={}&cp3={}".format(string_split[0], string_split[1]))
+        page = requests.get(page)
+        soup = BeautifulSoup(page.content, 'html.parser')
+        # print(soup.prettify())
+        result_local = soup.find_all('span', class_='local')[0].get_text()
+        local = str(result_local.split(",")[0])
+        parsed_address["city"] = local
+        address_final = parsed_address
+        return address_final
 
-        def find_local():
-            postcode = parsed_address["postcode"]
-            cp_string = postcode
-            string_split = (cp_string.split('-'))
-            page = ("https://www.codigo-postal.pt/?cp4={}&cp3={}".format(string_split[0], string_split[1]))
-            page = requests.get(page)
-            soup = BeautifulSoup(page.content, 'html.parser')
-            # print(soup.prettify())
-            result_local = soup.find_all('span', class_='local')[0].get_text()
-            local = str(result_local.split(",")[0])
-            return local
-
-        city_cp_request = find_local().title()
-        if city_input != city_cp_request:
-            local_final = city_cp_request
-            print(f'\u001b[31m{"Changed location: {}".format(local_final)}\u001b[0m')
-            return local_final
-        else:
-            local_final = city_input
-            print(f'\u001b[34m{"Unchanged location: {}".format(local_final)}\u001b[0m')
-            parsed_address["city"] = local_final
-            parsed_address_final = parsed_address
-            return parsed_address_final
-
-    address_input_out = compare_local()
+    address_input_out = find_city()
 
     def coord_nominatim():
         geolocator = Nominatim(user_agent="apiCoordinates")
@@ -102,18 +88,19 @@ def post_tabs():
     # tb_address ---------------------------------------------------------------------------
 
     address_dict = address_input_out
-    address_dict_street = address_dict["road"].capitalize()
-    address_dict_house_number = (address_dict["house_number"])
+    print(type(address_dict), address_dict)
+    address_dict_street = address_dict["road"]
+    address_dict_house_number = address_dict["house_number"]
     address_dict_house_number = str([int(s) for s in address_dict_house_number.split() if s.isdigit()])
     address_dict_house_number = address_dict_house_number.replace('{', '').replace('}', '')
-    address_dict_city = address_dict["city"].capitalize()
-    address_dict_country = address_dict["country"].capitalize()
+    address_dict_city = address_dict["city"]
+    address_dict_country = address_dict["country"]
     try:
-        tb_address = TbAddress(street=address_dict_street,
+        tb_address = TbAddress(street=address_dict_street.title(),
                                house_number=address_dict_house_number,
                                postal_code=address_dict["postcode"],
-                               city=address_dict_city,
-                               country=address_dict_country)
+                               city=address_dict_city.title(),
+                               country=address_dict_country.title())
         db.session.add(tb_address)
         db.session.commit()
         print(f'\u001b[32m{"Commit in tb_address its ok!"}\u001b[0m')
