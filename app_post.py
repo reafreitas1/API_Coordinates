@@ -1,7 +1,11 @@
-from flask import Flask, Response
+from flask import Flask, Response, request
 from flask_sqlalchemy import SQLAlchemy
-import in_geolocator
-import in_parsing
+from geopy.geocoders import Nominatim
+import urllib.parse
+import requests
+from datetime import datetime
+import requests
+from bs4 import BeautifulSoup
 from db_coordinates_model import TbAddress, TbRequest, TbUser, TbCoordinatesSource, TbCoordinates
 
 app = Flask(__name__)
@@ -12,8 +16,74 @@ db = SQLAlchemy(app)
 
 @app.route("/post", methods=["POST"])
 def post_tabs():
-    id_compare_address = []
-    coordenadas = in_geolocator.coord_nominatim()
+    address_input = str(request.args.get("address"))
+
+    def date_input_str():
+        date = (datetime.now().strftime('%d-%m-%Y'))
+        date_in = date
+        return date_in
+
+    def time_input_str():
+        time = (datetime.now().strftime('%H:%M:%S'))
+        time_in = time
+        return time_in
+
+    def get_address():
+        address1 = ()
+        specialChars = "!#$%:^&,.º*()"
+        for specialChar in specialChars:
+            address1 = address_input.replace(specialChar, ' ').lower().title()
+        address2 = address1.replace('  ', ' ').strip('"')
+        address_urllib = \
+            urllib.parse.quote_plus(address2)
+        return address_urllib
+
+    def parsing_address():
+        response = requests.get('http://localhost:4400/parse?address='
+                                + get_address())
+        parsed_address = {}
+        for item in response.json():
+            parsed_address[item['label']] = item['value']
+        return parsed_address
+
+    def compare_local():
+        parsed_address = parsing_address()
+        city_input = parsed_address["city"].title()
+
+        def find_local():
+            postcode = parsed_address["postcode"]
+            cp_string = postcode
+            string_split = (cp_string.split('-'))
+            page = ("https://www.codigo-postal.pt/?cp4={}&cp3={}".format(string_split[0], string_split[1]))
+            page = requests.get(page)
+            soup = BeautifulSoup(page.content, 'html.parser')
+            # print(soup.prettify())
+            result_local = soup.find_all('span', class_='local')[0].get_text()
+            local = str(result_local.split(",")[0])
+            return local
+
+        city_cp_request = find_local().title()
+        if city_input != city_cp_request:
+            local_final = city_cp_request
+            print(f'\u001b[31m{"Changed location: {}".format(local_final)}\u001b[0m')
+            return local_final
+        else:
+            local_final = city_input
+            print(f'\u001b[34m{"Unchanged location: {}".format(local_final)}\u001b[0m')
+            parsed_address["city"] = local_final
+            parsed_address_final = parsed_address
+            return parsed_address_final
+
+    address_input_out = compare_local()
+
+    def coord_nominatim():
+        geolocator = Nominatim(user_agent="apiCoordinates")
+        address = address_input_out
+        location = geolocator.geocode(address)
+        coords_final = location.latitude, location.longitude
+        return coords_final
+
+    coordinates = coord_nominatim()
     tb_address = []
     tb_user = []
     tb_coordinates_source = []
@@ -31,31 +101,24 @@ def post_tabs():
 
     # tb_address ---------------------------------------------------------------------------
 
-    address_dict = in_parsing.parsing_address()
+    address_dict = address_input_out
     address_dict_street = address_dict["road"].capitalize()
     address_dict_house_number = (address_dict["house_number"])
     address_dict_house_number = str([int(s) for s in address_dict_house_number.split() if s.isdigit()])
     address_dict_house_number = address_dict_house_number.replace('{', '').replace('}', '')
     address_dict_city = address_dict["city"].capitalize()
     address_dict_country = address_dict["country"].capitalize()
-    compare_tb_address = TbAddress.query.filter_by(street=address_dict["road"]).first()
-    if compare_tb_address is None:
-        try:
-            tb_address = TbAddress(street=address_dict_street,
-                                   house_number=address_dict_house_number,
-                                   postal_code=address_dict["postal_code"],
-                                   city=address_dict_city,
-                                   country=address_dict_country)
-            db.session.add(tb_address)
-            db.session.commit()
-            print(f'\u001b[32m{"Commit in tb_address its ok!"}\u001b[0m')
-        except Exception as e:
-            print(f'\u001b[31m{"Error to commit in tb_address: "}\u001b[0m', e)
-            pass
-    else:
-        id_compare_address = compare_tb_address.id_address
-        print(id_compare_address)
-        print("Address already exist in tb_address")
+    try:
+        tb_address = TbAddress(street=address_dict_street,
+                               house_number=address_dict_house_number,
+                               postal_code=address_dict["postcode"],
+                               city=address_dict_city,
+                               country=address_dict_country)
+        db.session.add(tb_address)
+        db.session.commit()
+        print(f'\u001b[32m{"Commit in tb_address its ok!"}\u001b[0m')
+    except Exception as e:
+        print(f'\u001b[31m{"Error to commit in tb_address: "}\u001b[0m', e)
         pass
 
     # tb_user -----------------------------------------------------------------------------------
@@ -73,71 +136,37 @@ def post_tabs():
 
     # tb_request ---------------------------------------------------------------------------------
 
-    address_input = in_parsing.address_input_str()  # grava exatamente como foi o input
-    time_input = in_parsing.time_input_str()
-    date_input = in_parsing.date_input_str()
-    if id_compare_address is None:
-        try:
-            tb_request = TbRequest(user_id=tb_user.id_user,
-                                   time_request=time_input,
-                                   address_raw_data=address_input,
-                                   address_request_id=tb_address.id_address,
-                                   date_request=date_input)
-            db.session.add(tb_request)
-            db.session.commit()
-            print(f'\u001b[32m{"Commit in tb_request its ok!"}\u001b[0m')
-        except Exception as e:
-            print(f'\u001b[31m{"Error to commit in tb_request: "}\u001b[0m', e)
-    else:
-        try:
-            tb_request = TbRequest(user_id=tb_user.id_user,
-                                   time_request=time_input,
-                                   address_raw_data=address_input,
-                                   address_request_id=id_compare_address,
-                                   date_request=date_input)
-            db.session.add(tb_request)
-            db.session.commit()
-            print(f'\u001b[32m{"Commit in tb_request its ok!"}\u001b[0m')
-        except Exception as e:
-            print(f'\u001b[31m{"Error to commit in tb_request: "}\u001b[0m', e)
+    time_input = time_input_str()
+    date_input = date_input_str()
+    try:
+        tb_request = TbRequest(user_id=tb_user.id_user,
+                               time_request=time_input,
+                               address_raw_data=address_input,
+                               address_request_id=tb_address.id_address,
+                               date_request=date_input)
+        db.session.add(tb_request)
+        db.session.commit()
+        print(f'\u001b[32m{"Commit in tb_request its ok!"}\u001b[0m')
+    except Exception as e:
+        print(f'\u001b[31m{"Error to commit in tb_request: "}\u001b[0m', e)
 
     # tb_coordinates ---------------------------------------------------------------------------
 
-    lat = str(coordenadas[0])
-    lng = str(coordenadas[1])
-    # print(lng)
-    # print(type(lng))
-    compare_lat = TbCoordinates.query.filter_by(found_lat=lat).first()
-    compare_lng = TbCoordinates.query.filter_by(found_lng=lng).first()
-    # print(compare_lng)
-    # print(type(compare_lng))
-    if compare_lat is None and compare_lng is None:
-        if id_compare_address is None:
-            try:
-                tb_coordinates = TbCoordinates(address_coord_id=tb_address.id_address,
-                                               coordinates_source_id=tb_coordinates_source.id_coordinates_source,
-                                               found_lat=lat,
-                                               found_lng=lng)
-                db.session.add(tb_coordinates)
-                print(f'\u001b[32m{"Commit in tb_coordinates its ok!"}\u001b[0m')
-                db.session.commit()
-            except Exception as e:
-                print(f'\u001b[31m{"Error to commit in tb_coordinates: "}\u001b[0m', e)
-        else:
-            try:
-                tb_coordinates = TbCoordinates(address_coord_id=id_compare_address,
-                                               coordinates_source_id=tb_coordinates_source.id_coordinates_source,
-                                               found_lat=lat,
-                                               found_lng=lng)
-                db.session.add(tb_coordinates)
-                print(f'\u001b[32m{"Commit in tb_coordinates its ok!"}\u001b[0m')
-                db.session.commit()
-            except Exception as e:
-                print(f'\u001b[31m{"Error to commit in tb_coordinates: "}\u001b[0m', e)
-    else:
-        print("Coordenadas already exist in tb_coordinates")
+    lat_str = str(coordinates[0])
+    lng_str = str(coordinates[1])
 
-    return Response(status=200)
+    try:
+        tb_coordinates = TbCoordinates(address_coord_id=tb_address.id_address,
+                                       coordinates_source_id=tb_coordinates_source.id_coordinates_source,
+                                       found_lat=lat_str,
+                                       found_lng=lng_str)
+        db.session.add(tb_coordinates)
+        print(f'\u001b[32m{"Commit in tb_coordinates its ok!"}\u001b[0m')
+        db.session.commit()
+    except Exception as e:
+        print(f'\u001b[31m{"Error to commit in tb_coordinates: "}\u001b[0m', e)
+
+    return None
 
 
 app.run()
