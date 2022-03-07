@@ -20,11 +20,13 @@ def post_tabs():
     def date_input_str():
         date = (datetime.now().strftime('%d-%m-%Y'))
         date_in = date
+        print(f'\u001b[33m{"FUNCTION date_input_str: "}\u001b[0m', date_in)
         return date_in
 
     def time_input_str():
         time = (datetime.now().strftime('%H:%M:%S'))
         time_in = time
+        print(f'\u001b[33m{"FUNCTION time_input_str: "}\u001b[0m', time_in)
         return time_in
 
     def get_address():
@@ -35,6 +37,7 @@ def post_tabs():
         address2 = address1.replace('  ', ' ').strip('"')
         address_urllib = \
             urllib.parse.quote_plus(address2)
+        print(f'\u001b[33m{"FUNCTION get_address: "}\u001b[0m', address_urllib)
         return address_urllib
 
     def parsing_address():
@@ -43,6 +46,7 @@ def post_tabs():
         parsed_address = {}
         for item in response.json():
             parsed_address[item['label']] = item['value']
+        print(f'\u001b[33m{"FUNCTION parsing_address: "}\u001b[0m', parsed_address)
         return parsed_address
 
     def find_city():
@@ -58,6 +62,7 @@ def post_tabs():
         local = str(result_local.split(",")[0])
         parsed_address["city"] = local
         address_final = parsed_address
+        print(f'\u001b[33m{"FUNCTION find_city: "}\u001b[0m', address_final)
         return address_final
 
     address_input_out = find_city()
@@ -67,6 +72,7 @@ def post_tabs():
         address = address_input_out
         location = geolocator.geocode(address)
         coords_final = location.latitude, location.longitude
+        print(f'\u001b[33m{"FUNCTION coord_nominatim: "}\u001b[0m', coords_final)
         return coords_final
 
     coordinates = coord_nominatim()
@@ -88,7 +94,6 @@ def post_tabs():
     # tb_address ---------------------------------------------------------------------------
 
     address_dict = address_input_out
-    print(type(address_dict), address_dict)
     address_dict_street = address_dict["road"]
     address_dict_house_number = address_dict["house_number"]
     address_dict_house_number = str([int(s) for s in address_dict_house_number.split() if s.isdigit()])
