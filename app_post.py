@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 from flask_sqlalchemy import SQLAlchemy
 from geopy.geocoders import Nominatim
 import urllib.parse
@@ -153,7 +153,7 @@ def post_tabs():
     except Exception as e:
         print(f'\u001b[31m{"Error to commit in tb_coordinates: "}\u001b[0m', e)
 
-    return None
+    return Response(status=200)
 
 
 app.run()
